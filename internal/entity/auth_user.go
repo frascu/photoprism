@@ -31,7 +31,7 @@ const (
 // UsernameLength specifies the minimum length of the username in characters.
 var UsernameLength = 1
 
-// PasswordLength specifies the minimum length of the password in characters.
+// PasswordLength specifies the minimum length of a password in characters (runes, not bytes).
 var PasswordLength = 4
 
 // UsersPath is the relative path for user assets.
@@ -740,8 +740,16 @@ func (m *User) DeleteSessions(omit []string) (deleted int) {
 		return 0
 	}
 
+	// Compose update statement.
+	stmt := Db()
+
 	// Find all user sessions except the session ids passed as argument.
-	stmt := Db().Where("user_uid = ? AND id NOT IN (?)", m.UserUID, omit)
+	if len(omit) == 0 {
+		stmt = stmt.Where("user_uid = ?", m.UserUID)
+	} else {
+		stmt = stmt.Where("user_uid = ? AND id NOT IN (?)", m.UserUID, omit)
+	}
+
 	sess := Sessions{}
 
 	if err := stmt.Find(&sess).Error; err != nil {
@@ -768,8 +776,10 @@ func (m *User) SetPassword(password string) error {
 		return fmt.Errorf("only registered users can change their password")
 	}
 
-	if len(password) < PasswordLength {
+	if len([]rune(password)) < PasswordLength {
 		return fmt.Errorf("password must have at least %d characters", PasswordLength)
+	} else if len(password) > txt.ClipPassword {
+		return fmt.Errorf("password must have less than %d characters", txt.ClipPassword)
 	}
 
 	pw := NewPassword(m.UserUID, password, false)
@@ -829,7 +839,7 @@ func (m *User) Validate() (err error) {
 
 	// Validate user role.
 	if acl.ValidRoles[m.UserRole] == "" {
-		return fmt.Errorf("role %s is invalid", clean.LogQuote(m.UserRole))
+		return fmt.Errorf("unsupported user role")
 	}
 
 	// Check if the username is unique.
@@ -1006,8 +1016,20 @@ func (m *User) Form() (form.User, error) {
 	return frm, nil
 }
 
+// PrivilegeLevelChange checks if saving the form changes the user privileges.
+func (m *User) PrivilegeLevelChange(f form.User) bool {
+	return m.UserRole != f.Role() ||
+		m.SuperAdmin != f.SuperAdmin ||
+		m.CanLogin != f.CanLogin ||
+		m.WebDAV != f.WebDAV ||
+		m.UserAttr != f.Attr() ||
+		m.AuthProvider != f.Provider().String() ||
+		m.BasePath != f.BasePath ||
+		m.UploadPath != f.UploadPath
+}
+
 // SaveForm updates the entity using form data and stores it in the database.
-func (m *User) SaveForm(f form.User, updateRights bool) error {
+func (m *User) SaveForm(f form.User, changePrivileges bool) error {
 	if m.UserName == "" || m.ID <= 0 {
 		return fmt.Errorf("system users cannot be modified")
 	} else if (m.ID == 1 || f.SuperAdmin) && acl.RoleAdmin.NotEqual(f.Role()) {
@@ -1045,8 +1067,8 @@ func (m *User) SaveForm(f form.User, updateRights bool) error {
 		m.VerifyToken = GenerateToken()
 	}
 
-	// Update user rights only if explicitly requested.
-	if updateRights {
+	// Change user privileges only if allowed.
+	if changePrivileges {
 		m.SetRole(f.Role())
 		m.SuperAdmin = f.SuperAdmin
 

@@ -76,7 +76,7 @@
                         flat solo hide-details
                         color="secondary-dark"
                         background-color="secondary"
-                        :items="options.sorting"
+                        :items="context === 'album' ? options.sorting : options.sorting.filter(item => item.value !== 'edited')"
                         @change="(v) => {updateQuery({'order': v})}">
               </v-select>
             </v-flex>
@@ -172,7 +172,7 @@
                   <v-icon color="white" class="select-off">star_border</v-icon>
                 </v-btn>
 
-                <v-btn v-if="canManage && featExperimental && featPrivate && album.Private"
+                <v-btn v-if="canManage && experimental && featPrivate && album.Private"
                        :ripple="false"
                        icon flat absolute
                        class="input-private"
@@ -301,12 +301,12 @@ export default {
 
     return {
       searchExpanded: false,
+      experimental: this.$config.get("experimental") && !this.$config.ce(),
       canUpload: this.$config.allow("files", "upload") && features.upload,
       canShare: this.$config.allow("albums", "share") && features.share,
       canManage: this.$config.allow("albums", "manage"),
       canEdit: this.$config.allow("albums", "update"),
       config: this.$config.values,
-      featExperimental: this.$config.get("experimental") && !this.$config.ce(),
       featShare: features.share,
       featPrivate: features.private,
       categories: categories,
@@ -346,7 +346,7 @@ export default {
           {value: 'newest', text: this.$gettext('Newest First')},
           {value: 'oldest', text: this.$gettext('Oldest First')},
           {value: 'added', text: this.$gettext('Recently Added')},
-          {value: 'edited', text: this.$gettext('Recently Edited')},
+          {value: 'edited', text: this.$gettext('Recently Edited')}
         ],
       },
     };

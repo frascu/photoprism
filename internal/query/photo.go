@@ -72,13 +72,26 @@ func PhotoPreloadByUID(photoUID string) (photo entity.Photo, err error) {
 	return photo, nil
 }
 
-// PhotosMissing returns photo entities without existing files.
-func PhotosMissing(limit int, offset int) (entities entity.Photos, err error) {
+// MissingPhotos returns photo entities without existing files.
+func MissingPhotos(limit int, offset int) (entities entity.Photos, err error) {
 	err = Db().
 		Select("photos.*").
 		Where("id NOT IN (SELECT photo_id FROM files WHERE file_missing = 0 AND file_root = '/' AND deleted_at IS NULL)").
 		Where("photos.photo_type <> ?", entity.MediaText).
-		Group("photos.id").
+		Order("photos.id").
+		Limit(limit).Offset(offset).Find(&entities).Error
+
+	return entities, err
+}
+
+// ArchivedPhotos finds and returns archived photos.
+func ArchivedPhotos(limit int, offset int) (entities entity.Photos, err error) {
+	err = UnscopedDb().
+		Select("photos.*").
+		Where("photos.photo_quality > -1").
+		Where("photos.deleted_at IS NOT NULL").
+		Where("photos.photo_type <> ?", entity.MediaText).
+		Order("photos.id").
 		Limit(limit).Offset(offset).Find(&entities).Error
 
 	return entities, err
@@ -181,6 +194,7 @@ func FlagHiddenPhotos() (err error) {
 		// Nothing to do.
 		return nil
 	} else if err = Db().Table(entity.Photo{}.TableName()).Where("id IN (?)", hidden).UpdateColumn("photo_quality", -1).Error; err != nil {
+		log.Warnf("index: failed to flag %d pictures as hidden", len(hidden))
 		// Update failed.
 		return err
 	} else {

@@ -1,6 +1,6 @@
 <template>
   <v-container grid-list-xs fluid class="pa-2 p-photos p-photo-mosaic">
-    <template v-if="photos.length === 0">
+    <div v-if="photos.length === 0" class="pa-0">
       <v-alert
           :value="true"
           color="secondary-dark"
@@ -24,7 +24,7 @@
           </template>
         </p>
       </v-alert>
-    </template>
+    </div>
     <v-layout row wrap class="search-results photo-results mosaic-view" :class="{'select-results': selectMode}">
       <template v-for="(photo, index) in photos">
         <div v-if="(filter.order === 'newest' || filter.order === 'oldest') && (index === 0 || isNewDay(photos[index - 1].TakenAt, photo.TakenAt))"

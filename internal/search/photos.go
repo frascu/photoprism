@@ -156,7 +156,7 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 		s = s.Order("files.photo_taken_at, files.media_id")
 	case sortby.Similar:
 		s = s.Where("files.file_diff > 0")
-		s = s.Order("photos.photo_color, photos.cell_id, files.file_diff, files.time_index")
+		s = s.Order("photos.photo_color, photos.cell_id, files.file_diff, files.photo_id, files.time_index")
 	case sortby.Name:
 		s = s.Order("photos.photo_path, photos.photo_name, files.time_index")
 	case sortby.Random:
@@ -300,7 +300,7 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 			f.Raw = true
 		case terms["favorites"]:
 			f.Query = strings.ReplaceAll(f.Query, "favorites", "")
-			f.Favorite = true
+			f.Favorite = "true"
 		case terms["stacks"]:
 			f.Query = strings.ReplaceAll(f.Query, "stacks", "")
 			f.Stack = true
@@ -309,7 +309,7 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 			f.Panorama = true
 		case terms["scans"]:
 			f.Query = strings.ReplaceAll(f.Query, "scans", "")
-			f.Scan = true
+			f.Scan = "true"
 		case terms["monochrome"]:
 			f.Query = strings.ReplaceAll(f.Query, "monochrome", "")
 			f.Mono = true
@@ -319,16 +319,17 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 		}
 	}
 
-	// Filter by location.
-	if f.Geo == true {
+	// Filter by location info.
+	if txt.No(f.Geo) {
+		s = s.Where("photos.cell_id = 'zz'")
+	} else if txt.NotEmpty(f.Geo) {
 		s = s.Where("photos.cell_id <> 'zz'")
+	}
 
-		for _, where := range LikeAnyKeyword("k.keyword", f.Query) {
-			s = s.Where("files.photo_id IN (SELECT pk.photo_id FROM keywords k JOIN photos_keywords pk ON k.id = pk.keyword_id WHERE (?))", gorm.Expr(where))
-		}
-	} else if f.Query != "" {
+	// Filter by query string.
+	if f.Query != "" {
 		if err := Db().Where(AnySlug("custom_slug", f.Query, " ")).Find(&labels).Error; len(labels) == 0 || err != nil {
-			log.Debugf("search: label %s not found, using fuzzy search", txt.LogParamLower(f.Query))
+			log.Tracef("search: label %s not found, using fuzzy search", txt.LogParamLower(f.Query))
 
 			for _, where := range LikeAnyKeyword("k.keyword", f.Query) {
 				s = s.Where("files.photo_id IN (SELECT pk.photo_id FROM keywords k JOIN photos_keywords pk ON k.id = pk.keyword_id WHERE (?))", gorm.Expr(where))
@@ -339,7 +340,7 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 
 				Db().Where("category_id = ?", l.ID).Find(&categories)
 
-				log.Debugf("search: label %s includes %d categories", txt.LogParamLower(l.LabelName), len(categories))
+				log.Tracef("search: label %s includes %d categories", txt.LogParamLower(l.LabelName), len(categories))
 
 				for _, category := range categories {
 					labelIds = append(labelIds, category.LabelID)
@@ -477,13 +478,17 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 		s = s.Where("files.file_main_color IN (?)", SplitOr(strings.ToLower(f.Color)))
 	}
 
-	// Find favorites only.
-	if f.Favorite {
+	// Filter by favorite flag.
+	if txt.No(f.Favorite) {
+		s = s.Where("photos.photo_favorite = 0")
+	} else if txt.NotEmpty(f.Favorite) {
 		s = s.Where("photos.photo_favorite = 1")
 	}
 
-	// Find scans only.
-	if f.Scan {
+	// Filter by scan flag.
+	if txt.No(f.Scan) {
+		s = s.Where("photos.photo_scan = 0")
+	} else if txt.NotEmpty(f.Scan) {
 		s = s.Where("photos.photo_scan = 1")
 	}
 
@@ -633,6 +638,13 @@ func searchPhotos(f form.SearchPhotos, sess *entity.Session, resultCols string) 
 		lngMin := f.Lng - Radius*float32(f.Dist)
 		lngMax := f.Lng + Radius*float32(f.Dist)
 		s = s.Where("photos.photo_lng BETWEEN ? AND ?", lngMin, lngMax)
+	}
+
+	if f.Latmin != 0 && f.Latmax != 0 {
+		s = s.Where("photos.photo_lat BETWEEN ? AND ?", f.Latmin, f.Latmax)
+	}
+	if f.Lngmin != 0 && f.Lngmax != 0 {
+		s = s.Where("photos.photo_lng BETWEEN ? AND ?", f.Lngmin, f.Lngmax)
 	}
 
 	if !f.Before.IsZero() {

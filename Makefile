@@ -54,6 +54,7 @@ all: dep build-js
 dep: dep-tensorflow dep-js
 biuld: build
 build: build-go
+build-all: build-go build-js
 pull: docker-pull
 test: test-js test-go
 test-go: reset-sqlite run-test-go
@@ -141,9 +142,9 @@ acceptance-sqlite-restart:
 	rm -rf storage/acceptance/originals/2011
 	rm -rf storage/acceptance/originals/2013
 	rm -rf storage/acceptance/originals/2017
-	./photoprism -p -c "./storage/acceptance/config-sqlite" --test start -d
+	./photoprism --auth-mode="public" -c "./storage/acceptance/config-sqlite" --test start -d
 acceptance-sqlite-stop:
-	./photoprism -p -c "./storage/acceptance/config-sqlite" --test stop
+	./photoprism --auth-mode="public" -c "./storage/acceptance/config-sqlite" --test stop
 acceptance-auth-sqlite-restart:
 	cp -f storage/acceptance/backup.db storage/acceptance/index.db
 	cp -f storage/acceptance/config-sqlite/settingsBackup.yml storage/acceptance/config-sqlite/settings.yml
@@ -371,9 +372,10 @@ docker-unstable-lunar:
 	docker pull --platform=amd64 photoprism/develop:lunar
 	docker pull --platform=amd64 photoprism/develop:lunar-slim
 	scripts/docker/buildx-multi.sh photoprism linux/amd64 unstable-ce /lunar
-preview: docker-preview
-docker-preview: docker-preview-latest
+preview: docker-preview-ce
+docker-preview: docker-preview-ce
 docker-preview-all: docker-preview-latest docker-preview-other
+docker-preview-ce: docker-preview-lunar
 docker-preview-latest: docker-preview-ubuntu
 docker-preview-debian: docker-preview-bookworm
 docker-preview-ubuntu: docker-preview-lunar
@@ -416,14 +418,14 @@ docker-preview-lunar:
 	docker pull --platform=amd64 photoprism/develop:lunar-slim
 	docker pull --platform=arm64 photoprism/develop:lunar
 	docker pull --platform=arm64 photoprism/develop:lunar-slim
-	scripts/docker/buildx-multi.sh photoprism linux/amd64,linux/arm64 preview-ce /lunar "-t photoprism/photoprism:preview-ce-ubuntu"
+	scripts/docker/buildx-multi.sh photoprism linux/amd64,linux/arm64 preview-ce /lunar
 docker-preview-impish:
 	docker pull --platform=amd64 photoprism/develop:impish
 	docker pull --platform=arm64 photoprism/develop:impish
 	docker pull --platform=amd64 ubuntu:impish
 	docker pull --platform=arm64 ubuntu:impish
 	scripts/docker/buildx-multi.sh photoprism linux/amd64,linux/arm64 preview-impish /impish
-release: docker-release-all
+release: docker-release
 docker-release: docker-release-latest
 docker-release-all: docker-release-latest docker-release-other
 docker-release-latest: docker-release-ubuntu

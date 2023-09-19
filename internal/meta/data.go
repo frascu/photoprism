@@ -27,12 +27,13 @@ type Data struct {
 	FPS           float64       `meta:"VideoFrameRate,VideoAvgFrameRate"`
 	Frames        int           `meta:"FrameCount,AnimationFrames"`
 	Codec         string        `meta:"CompressorID,VideoCodecID,CodecID,OtherFormat,FileType"`
-	Title         string        `meta:"Headline,Title" xmp:"dc:title" dc:"title,title.Alt"`
+	Title         string        `meta:"Title,Headline" xmp:"dc:title" dc:"title,title.Alt"`
+	Description   string        `meta:"Description,ImageDescription,Caption,Caption-Abstract" xmp:"Description,Description.Alt"`
 	Subject       string        `meta:"Subject,PersonInImage,ObjectName,HierarchicalSubject,CatalogSets" xmp:"Subject"`
 	Keywords      Keywords      `meta:"Keywords"`
+	Favorite      bool          `meta:"Favorite"`
 	Notes         string        `meta:"Comment,UserComment"`
 	Artist        string        `meta:"Artist,Creator,By-line,OwnerName,Owner" xmp:"Creator"`
-	Description   string        `meta:"Description,Caption-Abstract" xmp:"Description,Description.Alt"`
 	Copyright     string        `meta:"Rights,Copyright,CopyrightNotice,WebStatement" xmp:"Rights,Rights.Alt"`
 	License       string        `meta:"UsageTerms,License"`
 	Projection    string        `meta:"ProjectionType"`
@@ -64,6 +65,7 @@ type Data struct {
 	Rotation      int           `meta:"Rotation"`
 	Views         int           `meta:"-"`
 	Albums        []string      `meta:"-"`
+	EmbeddedVideo string        `meta:"-"`
 	Error         error         `meta:"-"`
 	json          map[string]string
 	exif          map[string]string

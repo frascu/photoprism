@@ -4,11 +4,12 @@ import (
 	"fmt"
 
 	"github.com/photoprism/photoprism/internal/ffmpeg"
+	"github.com/photoprism/photoprism/internal/thumb"
 )
 
 // FFmpegBin returns the ffmpeg executable file name.
 func (c *Config) FFmpegBin() string {
-	return findBin(c.options.FFmpegBin, "ffmpeg")
+	return findBin(c.options.FFmpegBin, ffmpeg.DefaultBin)
 }
 
 // FFmpegEnabled checks if FFmpeg is enabled for video transcoding.
@@ -23,6 +24,11 @@ func (c *Config) FFmpegEncoder() ffmpeg.AvcEncoder {
 	}
 
 	return ffmpeg.FindEncoder(c.options.FFmpegEncoder)
+}
+
+// FFmpegSize returns the maximum ffmpeg video encoding size in pixels (720-7680).
+func (c *Config) FFmpegSize() int {
+	return thumb.VideoSize(c.options.FFmpegSize).Width
 }
 
 // FFmpegBitrate returns the ffmpeg bitrate limit in MBit/s.
@@ -72,6 +78,7 @@ func (c *Config) FFmpegOptions(encoder ffmpeg.AvcEncoder, bitrate string) (ffmpe
 	opt := ffmpeg.Options{
 		Bin:      c.FFmpegBin(),
 		Encoder:  encoder,
+		Size:     c.FFmpegSize(),
 		Bitrate:  bitrate,
 		MapVideo: c.FFmpegMapVideo(),
 		MapAudio: c.FFmpegMapAudio(),

@@ -2,7 +2,7 @@
   <v-container fluid fill-height :class="$config.aclClasses('places')" class="pa-0 p-page p-page-places">
     <div id="map" style="width: 100%; height: 100%;">
       <div v-if="canSearch" class="map-control">
-        <div class="maplibregl-ctrl maplibregl-ctrl-group">
+        <div class="maplibregl-ctrl maplibregl-ctrl-group map-control-search">
           <v-text-field v-model.lazy.trim="filter.q"
                         solo hide-details clearable flat single-line validate-on-blur
                         class="input-search pa-0 ma-0"
@@ -18,6 +18,16 @@
         </div>
       </div>
     </div>
+    <v-dialog v-model="showClusterPictures" overflowed width="100%">
+      <v-card min-height="80vh">
+        <p-page-photos
+          v-if="showClusterPictures"
+          :static-filter="selectedClusterBounds"
+          :on-close="unselectCluster"
+          sticky-toolbar
+        />
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
@@ -25,9 +35,13 @@
 import maplibregl from "maplibre-gl";
 import Api from "common/api";
 import Thumb from "model/thumb";
+import PPagePhotos from 'page/photos.vue';
 
 export default {
   name: 'PPagePlaces',
+  components: {
+    PPagePhotos,
+  },
   props: {
     staticFilter: {
       type: Object,
@@ -36,13 +50,16 @@ export default {
     },
   },
   data() {
+    const settings = this.$config.values.settings.maps;
     return {
       canSearch: this.$config.allow("places", "search"),
       initialized: false,
       map: null,
       markers: {},
       markersOnScreen: {},
+      clusterIds: [],
       loading: false,
+      markerPromise: null,
       style: "",
       terrain: {
         'topo-v2': 'terrain_rgb',
@@ -57,24 +74,56 @@ export default {
       filter: {q: this.query(), s: this.scope()},
       lastFilter: {},
       config: this.$config.values,
-      settings: this.$config.values.settings.maps,
+      settings: settings,
+      animate: settings.animate,
+      selectedClusterBounds: undefined,
+      showClusterPictures: false,
     };
   },
   watch: {
     '$route'() {
+
+      const clusterWasOpenBeforeRouterChange = this.selectedClusterBounds !== undefined;
+      const clusterIsOpenAfterRouteChange = this.getSelectedClusterFromUrl() !== undefined;
+      const lastRouteChangeWasClusterOpenOrClose = clusterWasOpenBeforeRouterChange !== clusterIsOpenAfterRouteChange;
+
+      if (lastRouteChangeWasClusterOpenOrClose) {
+        this.updateSelectedClusterFromUrl();
+
+        /**
+         * dont touch any filters or searches if the only action taken was
+         * opening or closing a cluster.
+         * This currently assumes that when a cluster was opened or closed,
+         * nothing else changed. I currently can't think of a scenario, where
+         * a route-change is triggered by the user wanting to open/close a cluster
+         * AND for example update the filter at the same time.
+         *
+         * Without this, opening or closing a cluster triggers a search, even
+         * though no search parameter changed. Also without this, closing a
+         * cluster resets the filter, because closing a cluster is done via
+         * backwards navigation.
+         * (closing is cluster is done via backwards navigation so that it can
+         * be closed using the back-button. This is especially useful on android
+         * smartphones)
+         */
+        return;
+      }
+
       this.filter.q = this.query();
       this.filter.s = this.scope();
       this.lastFilter = {};
 
       this.search();
+    },
+    showClusterPictures: function (newValue, old) {
+      if (!newValue) {
+        this.unselectCluster();
+      }
     }
   },
   mounted() {
-    this.$scrollbar.hide();
     this.configureMap().then(() => this.renderMap());
-  },
-  destroyed() {
-    this.$scrollbar.show();
+    this.updateSelectedClusterFromUrl();
   },
   methods: {
     configureMap() {
@@ -237,6 +286,59 @@ export default {
         this.options = mapOptions;
       });
     },
+    getSelectedClusterFromUrl() {
+      const clusterIsSelected = this.$route.query.selectedCluster !== undefined
+        && this.$route.query.selectedCluster !== '';
+      if (!clusterIsSelected) {
+        return undefined;
+      }
+
+      const [latmin, latmax, lngmin, lngmax] = this.$route.query.selectedCluster.split(',');
+      return {latmin, latmax, lngmin, lngmax};
+    },
+    updateSelectedClusterFromUrl: function () {
+      this.selectedClusterBounds = this.getSelectedClusterFromUrl();
+      this.showClusterPictures = this.selectedClusterBounds !== undefined;
+    },
+    selectClusterByCoords: function (latMin, latMax, lngMin, lngMax) {
+      this.$router.push({
+        query: {
+          selectedCluster: [latMin, latMax, lngMin, lngMax].join(','),
+        },
+        params: this.filter,
+      });
+    },
+    selectClusterById: function (clusterId) {
+      this.getClusterFeatures(clusterId, -1, (clusterFeatures) => {
+        let latMin, latMax, lngMin, lngMax;
+        for (const feature of clusterFeatures) {
+          const [lng, lat] = feature.geometry.coordinates;
+          if (latMin === undefined || lat < latMin) {
+            latMin = lat;
+          }
+          if (latMax === undefined || lat > latMax) {
+            latMax = lat;
+          }
+          if (lngMin === undefined || lng < lngMin) {
+            lngMin = lng;
+          }
+          if (lngMax === undefined || lng > lngMax) {
+            lngMax = lng;
+          }
+        }
+
+        this.selectClusterByCoords(latMin, latMax, lngMin, lngMax);
+      });
+    },
+    unselectCluster: function () {
+      const aClusterIsSelected = this.getSelectedClusterFromUrl() !== undefined;
+      if (aClusterIsSelected) {
+        // it shouldn't matter wether a cluster was closed by pressing the back
+        // button on a browser or the x-button on the dialog. We therefore make
+        // both actions do the exact same thing: navigate backwards
+        this.$router.go(-1);
+      }
+    },
     query: function () {
       return this.$route.params.q ? this.$route.params.q : '';
     },
@@ -277,7 +379,9 @@ export default {
       });
     },
     formChange() {
-      if (this.loading) return;
+      if (this.loading) {
+        return;
+      }
       this.search();
     },
     clearQuery() {
@@ -285,7 +389,9 @@ export default {
       this.search();
     },
     updateQuery() {
-      if (this.loading) return;
+      if (this.loading) {
+        return;
+      }
 
       if (this.query() !== this.filter.q) {
         if (this.filter.s) {
@@ -312,7 +418,9 @@ export default {
       return params;
     },
     search() {
-      if (this.loading) return;
+      if (this.loading) {
+        return;
+      }
 
       // Don't query the same data more than once
       if (JSON.stringify(this.lastFilter) === JSON.stringify(this.filter)) return;
@@ -345,16 +453,17 @@ export default {
           this.map.fitBounds(this.result.bbox, {
             maxZoom: 17,
             padding: 100,
-            duration: this.settings.animate,
+            duration: this.animate,
             essential: false,
-            animate: this.settings.animate > 0
+            animate: true
           });
         }
 
         this.initialized = true;
+        this.loading = false;
 
         this.updateMarkers();
-      }).finally(() => {
+      }).catch(() => {
         this.loading = false;
       });
     },
@@ -392,123 +501,184 @@ export default {
 
       this.map.on("load", () => this.onMapLoad());
     },
+    getClusterFeatures(clusterId, limit, callback) {
+      this.map.getSource('photos').getClusterLeaves(clusterId, limit, undefined, (error, clusterFeatures) => {
+        callback(clusterFeatures);
+      });
+    },
+    getMultipleClusterFeatures(clusterIds, callback) {
+      const result = {};
+      let handledClusterLeaveResultCount = 0;
+      for (const clusterId of clusterIds) {
+        this.getClusterFeatures(clusterId, 100, (clusterFeatures) => {
+          result[clusterId] = clusterFeatures;
+          handledClusterLeaveResultCount += 1;
+
+          if (handledClusterLeaveResultCount === clusterIds.length) {
+            callback(result);
+          }
+        });
+      }
+    },
+    getClusterSizeFromItemCount(itemCount) {
+      if (itemCount >= 10000) {
+        return 74;
+      } else if (itemCount >= 1000) {
+        return 70;
+      } else if (itemCount >= 750) {
+        return 68;
+      } else if (itemCount >= 200) {
+        return 66;
+      } else if (itemCount >= 100) {
+        return 64;
+      }
+
+      return 60;
+    },
+    abbreviateCount(val) {
+      const value = Number.parseInt(val);
+      if (value >= 1000) {
+        return (value / 1000).toFixed(0).toString() + 'k';
+      }
+      return value;
+    },
     updateMarkers() {
       if (this.loading) return;
       let newMarkers = {};
       let features = this.map.querySourceFeatures("photos");
+      let token = this.$config.previewToken;
 
       for (let i = 0; i < features.length; i++) {
         let coords = features[i].geometry.coordinates;
         let props = features[i].properties;
-        if (props.cluster) continue;
-        let id = features[i].id;
 
-        let marker = this.markers[id];
-        let token = this.$config.previewToken;
-        if (!marker) {
-          let el = document.createElement('div');
-          el.className = 'marker';
-          el.title = props.Title;
-          el.style.backgroundImage = `url(${this.$config.contentUri}/t/${props.Hash}/${token}/tile_50)`;
-          el.style.width = '50px';
-          el.style.height = '50px';
+        if (props.cluster) {
+          // Clusters.
+          let id = -1*props.cluster_id;
 
-          el.addEventListener('click', () => this.openPhoto(props.UID));
-          marker = this.markers[id] = new maplibregl.Marker({
-            element: el
-          }).setLngLat(coords);
+          let marker = this.markers[id];
+
+          if (!marker) {
+            const size = this.getClusterSizeFromItemCount(props.point_count);
+            let el = document.createElement('div');
+
+            el.style.width = `${size}px`;
+            el.style.height = `${size}px`;
+
+            const imageContainer = document.createElement('div');
+            imageContainer.className = 'marker cluster-marker';
+
+            this.map.getSource('photos').getClusterLeaves(props.cluster_id, 4, 0, (error, clusterFeatures) => {
+              if (error) {
+                return;
+              }
+
+              const previewImageCount = clusterFeatures.length >= 4 ? 4 : clusterFeatures.length > 1 ? 2 : 1;
+              const images = Array(previewImageCount)
+                .fill(null)
+                .map((a,i) => {
+                  const feature = clusterFeatures[Math.floor(clusterFeatures.length * i / previewImageCount)];
+                  const image = document.createElement('div');
+                  image.style.backgroundImage = `url(${this.$config.contentUri}/t/${feature.properties.Hash}/${token}/tile_${50})`;
+                  return image;
+                });
+
+              imageContainer.append(...images);
+            });
+
+            const counterBubble = document.createElement('div');
+
+            counterBubble.className = 'counter-bubble primary-button theme--light';
+            counterBubble.innerText = this.abbreviateCount(props.point_count);
+
+            el.append(imageContainer);
+            el.append(counterBubble);
+            el.addEventListener('click', () => {
+              this.selectClusterById(props.cluster_id);
+            });
+
+            marker = this.markers[id] = new maplibregl.Marker({
+              element: el
+            }).setLngLat(coords);
+          } else {
+            marker.setLngLat(coords);
+          }
+
+          newMarkers[id] = marker;
+
+          if (!this.markersOnScreen[id]) {
+            marker.addTo(this.map);
+          }
         } else {
-          marker.setLngLat(coords);
-        }
+          // Pictures.
+          let id = features[i].id;
 
-        newMarkers[id] = marker;
+          let marker = this.markers[id];
+          if (!marker) {
+            let el = document.createElement('div');
+            el.className = 'marker';
+            el.title = props.Title;
+            el.style.backgroundImage = `url(${this.$config.contentUri}/t/${props.Hash}/${token}/tile_50)`;
+            el.style.width = '50px';
+            el.style.height = '50px';
 
-        if (!this.markersOnScreen[id]) {
-          marker.addTo(this.map);
+            el.addEventListener('click', () => this.openPhoto(props.UID));
+            marker = this.markers[id] = new maplibregl.Marker({
+              element: el
+            }).setLngLat(coords);
+          } else {
+            marker.setLngLat(coords);
+          }
+
+          newMarkers[id] = marker;
+
+          if (!this.markersOnScreen[id]) {
+            marker.addTo(this.map);
+          }
         }
       }
+
       for (let id in this.markersOnScreen) {
         if (!newMarkers[id]) {
           this.markersOnScreen[id].remove();
         }
       }
+
       this.markersOnScreen = newMarkers;
     },
     onMapLoad() {
+      // Add 'photos' data source.
       this.map.addSource('photos', {
         type: 'geojson',
         data: null,
         cluster: true,
-        clusterMaxZoom: 14, // Max zoom to cluster points on
-        clusterRadius: 50 // Radius of each cluster when clustering points (defaults to 50)
+        clusterMaxZoom: 18, // Max zoom to cluster points on
+        clusterRadius: 80 // Radius of each cluster when clustering points (defaults to 50)
       });
 
+      // Add 'clusters' layer.
       this.map.addLayer({
         id: 'clusters',
         type: 'circle',
         source: 'photos',
         filter: ['has', 'point_count'],
-        paint: {
-          'circle-color': [
-            'step',
-            ['get', 'point_count'],
-            '#2DC4B2',
-            100,
-            '#3BB3C3',
-            750,
-            '#669EC4'
-          ],
-          'circle-radius': [
-            'step',
-            ['get', 'point_count'],
-            20,
-            100,
-            30,
-            750,
-            40
-          ]
+      });
+
+      // Example of dynamic map cluster rendering:
+      // https://maplibre.org/maplibre-gl-js/docs/examples/cluster-html/
+      this.map.on('data', (e) => {
+        if (e.sourceId === 'photos' && e.isSourceLoaded) {
+          this.updateMarkers();
         }
       });
 
-      this.map.addLayer({
-        id: 'cluster-count',
-        type: 'symbol',
-        source: 'photos',
-        filter: ['has', 'point_count'],
-        layout: {
-          'text-field': '{point_count_abbreviated}',
-          'text-font': this.mapFont,
-          'text-size': 13
-        }
-      });
+      // Add additional event handlers to update the marker previews.
+      this.map.on('move', this.updateMarkers);
+      this.map.on('moveend', this.updateMarkers);
+      this.map.on('resize', this.updateMarkers);
+      this.map.on('idle', this.updateMarkers);
 
-      this.map.on('render', this.updateMarkers);
-
-      this.map.on('click', 'clusters', (e) => {
-        const features = this.map.queryRenderedFeatures(e.point, {
-          layers: ['clusters']
-        });
-        const clusterId = features[0].properties.cluster_id;
-        this.map.getSource('photos').getClusterExpansionZoom(
-          clusterId,
-          (err, zoom) => {
-            if (err) return;
-
-            this.map.easeTo({
-              center: features[0].geometry.coordinates,
-              zoom: zoom
-            });
-          }
-        );
-      });
-
-      this.map.on('mouseenter', 'clusters', () => {
-        this.map.getCanvas().style.cursor = 'pointer';
-      });
-      this.map.on('mouseleave', 'clusters', () => {
-        this.map.getCanvas().style.cursor = '';
-      });
-
+      // Load pictures.
       this.search();
     },
   },

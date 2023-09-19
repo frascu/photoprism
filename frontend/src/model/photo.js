@@ -431,14 +431,14 @@ export class Photo extends RestModel {
     let width = actualWidth;
     let height = actualHeight;
 
-    if (vw < width + 80) {
-      let newWidth = vw - 90;
+    if (vw < width + 90) {
+      let newWidth = vw - 100;
       height = Math.round(newWidth * (actualHeight / actualWidth));
       width = newWidth;
     }
 
-    if (vh < height + 100) {
-      let newHeight = vh - 160;
+    if (vh < height + 90) {
+      let newHeight = vh - 100;
       width = Math.round(newHeight * (actualWidth / actualHeight));
       height = newHeight;
     }
@@ -580,25 +580,28 @@ export class Photo extends RestModel {
     return this.generateThumbnailUrl(
       this.mainFileHash(),
       this.videoFile(),
+      config.staticUri,
       config.contentUri,
       config.previewToken,
       size
     );
   }
 
-  generateThumbnailUrl = memoizeOne((mainFileHash, videoFile, contentUri, previewToken, size) => {
-    let hash = mainFileHash;
+  generateThumbnailUrl = memoizeOne(
+    (mainFileHash, videoFile, staticUri, contentUri, previewToken, size) => {
+      let hash = mainFileHash;
 
-    if (!hash) {
-      if (videoFile && videoFile.Hash) {
-        return `${contentUri}/t/${videoFile.Hash}/${previewToken}/${size}`;
+      if (!hash) {
+        if (videoFile && videoFile.Hash) {
+          return `${contentUri}/t/${videoFile.Hash}/${previewToken}/${size}`;
+        }
+
+        return `${staticUri}/img/404.jpg`;
       }
 
-      return `${contentUri}/svg/photo`;
+      return `${contentUri}/t/${hash}/${previewToken}/${size}`;
     }
-
-    return `${contentUri}/t/${hash}/${previewToken}/${size}`;
-  });
+  );
 
   getDownloadUrl() {
     return `${config.apiUri}/dl/${this.mainFileHash()}?t=${config.downloadToken}`;
@@ -848,11 +851,7 @@ export class Photo extends RestModel {
   });
 
   getPhotoInfo = () => {
-    let file = this.videoFile();
-    if (!file || !file.Width) {
-      file = this.mainFile();
-    }
-
+    let file = this.mainFile() || this.videoFile();
     return this.generatePhotoInfo(this.Camera, this.CameraModel, this.CameraMake, file);
   };
 

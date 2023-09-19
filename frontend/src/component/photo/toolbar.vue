@@ -1,6 +1,7 @@
 <template>
   <v-form ref="form" lazy-validation
           dense autocomplete="off" class="p-photo-toolbar" accept-charset="UTF-8"
+          :class="{'sticky': sticky}"
           @submit.prevent="updateQuery()">
     <v-toolbar flat :dense="$vuetify.breakpoint.smAndDown" class="page-toolbar" color="secondary">
       <v-text-field :value="filter.q"
@@ -32,7 +33,11 @@
         <v-icon>view_column</v-icon>
       </v-btn>
 
-      <v-btn v-if="!$config.values.readonly && $config.feature('upload')" icon class="hidden-sm-and-down action-upload"
+      <v-btn v-if="canDelete && context === 'archive' && config.count.archived > 0" icon class="hidden-sm-and-down action-sweep"
+             :title="$gettext('Delete')" @click.stop="sweepArchive()">
+        <v-icon>delete_sweep</v-icon>
+      </v-btn>
+      <v-btn v-else-if="canUpload" icon class="hidden-sm-and-down action-upload"
              :title="$gettext('Upload')" @click.stop="showUpload()">
         <v-icon>cloud_upload</v-icon>
       </v-btn>
@@ -40,6 +45,10 @@
       <v-btn icon class="p-expand-search" :title="$gettext('Expand Search')"
              @click.stop="searchExpanded = !searchExpanded">
         <v-icon>{{ searchExpanded ? 'keyboard_arrow_up' : 'keyboard_arrow_down' }}</v-icon>
+      </v-btn>
+
+      <v-btn v-if="onClose !== undefined" icon class="action-close" @click.stop="onClose">
+        <v-icon>close</v-icon>
       </v-btn>
     </v-toolbar>
 
@@ -166,15 +175,26 @@
         </v-layout>
       </v-card-text>
     </v-card>
+    <p-photo-delete-dialog
+      :show="dialog.delete"
+      :text="$gettext('Are you sure you want to delete all archived pictures?')"
+      @cancel="dialog.delete = false" @confirm="batchDelete">
+    </p-photo-delete-dialog>
   </v-form>
 </template>
 <script>
 import Event from "pubsub-js";
 import * as options from "options/options";
+import Api from "common/api";
+import Notify from "common/notify";
 
 export default {
   name: 'PPhotoToolbar',
   props: {
+    context: {
+      type: String,
+      default: 'photos',
+    },
     filter: {
       type: Object,
       default: () => {},
@@ -195,12 +215,25 @@ export default {
       type: Function,
       default: () => {},
     },
+    onClose: {
+      type: Function,
+      default: undefined,
+    },
+    sticky: {
+      type: Boolean,
+      default: false
+    },
   },
   data() {
+    const features = this.$config.settings().features;
+    const readonly = this.$config.get("readonly");
     return {
       experimental: this.$config.get("experimental"),
       isFullScreen: !!document.fullscreenElement,
       config: this.$config.values,
+      readonly: readonly,
+      canUpload: !readonly && this.$config.allow("files", "upload") && features.upload,
+      canDelete: !readonly && this.$config.allow("photos", "delete") && features.delete,
       searchExpanded: false,
       all: {
         countries: [{ID: "", Name: this.$gettext("All Countries")}],
@@ -228,6 +261,9 @@ export default {
           {value: 'relevance', text: this.$gettext('Most Relevant')},
           {value: 'similar', text: this.$gettext('Visual Similarity')},
         ],
+      },
+      dialog: {
+        delete: false,
       },
     };
   },
@@ -262,7 +298,27 @@ export default {
     },
     showUpload() {
       Event.publish("dialog.upload");
-    }
+    },
+    sweepArchive() {
+      if (!this.canDelete) {
+        return;
+      }
+
+      this.dialog.delete = true;
+    },
+    batchDelete() {
+      if (!this.canDelete) {
+        return;
+      }
+
+      this.dialog.delete = false;
+
+      Api.post("batch/photos/delete", {"all": true}).then(() => this.onDeleted());
+    },
+    onDeleted() {
+      Notify.success(this.$gettext("Permanently deleted"));
+      this.$clipboard.clear();
+    },
   },
 };
 </script>

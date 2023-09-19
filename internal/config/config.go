@@ -33,6 +33,7 @@ import (
 	"github.com/photoprism/photoprism/internal/i18n"
 	"github.com/photoprism/photoprism/internal/mutex"
 	"github.com/photoprism/photoprism/internal/thumb"
+	"github.com/photoprism/photoprism/internal/ttl"
 	"github.com/photoprism/photoprism/pkg/clean"
 	"github.com/photoprism/photoprism/pkg/fs"
 	"github.com/photoprism/photoprism/pkg/rnd"
@@ -73,7 +74,7 @@ func init() {
 		t := thumb.Sizes[name]
 
 		if t.Public {
-			Thumbs = append(Thumbs, ThumbSize{Size: string(name), Use: t.Use, Width: t.Width, Height: t.Height})
+			Thumbs = append(Thumbs, ThumbSize{Size: string(name), Usage: t.Usage, Width: t.Width, Height: t.Height})
 		}
 	}
 }
@@ -144,7 +145,7 @@ func (c *Config) Restart() bool {
 // CliContext returns the cli context if set.
 func (c *Config) CliContext() *cli.Context {
 	if c.cliCtx == nil {
-		log.Warnf("config: cli context not set - possible bug")
+		log.Warnf("config: cli context not set - you may have found a bug")
 	}
 
 	return c.cliCtx
@@ -162,7 +163,7 @@ func (c *Config) CliGlobalString(name string) string {
 // Options returns the raw config options.
 func (c *Config) Options() *Options {
 	if c.options == nil {
-		log.Warnf("config: options should not be nil - possible bug")
+		log.Warnf("config: options should not be nil - you may have found a bug")
 		c.options = NewOptions(nil)
 	}
 
@@ -180,8 +181,11 @@ func (c *Config) Propagate() {
 	thumb.SizeUncached = c.ThumbSizeUncached()
 	thumb.Filter = c.ThumbFilter()
 	thumb.JpegQuality = c.JpegQuality()
-	thumb.CacheMaxAge = c.HttpCacheMaxAge()
 	thumb.CachePublic = c.HttpCachePublic()
+
+	// Set cache expiration defaults.
+	ttl.Default = c.HttpCacheMaxAge()
+	ttl.Video = c.HttpVideoMaxAge()
 
 	// Set geocoding parameters.
 	places.UserAgent = c.UserAgent()
@@ -219,14 +223,17 @@ func (c *Config) Propagate() {
 func (c *Config) Init() error {
 	start := time.Now()
 
+	// Create configured directory paths.
 	if err := c.CreateDirectories(); err != nil {
 		return err
 	}
 
-	if err := c.initSerial(); err != nil {
+	// Init storage directories with a random serial.
+	if err := c.InitSerial(); err != nil {
 		return err
 	}
 
+	// Detect case-insensitive file system.
 	if insensitive, err := c.CaseInsensitive(); err != nil {
 		return err
 	} else if insensitive {
@@ -234,6 +241,7 @@ func (c *Config) Init() error {
 		fs.IgnoreCase()
 	}
 
+	// Detect CPU.
 	if cpuName := cpuid.CPU.BrandName; cpuName != "" {
 		log.Debugf("config: running on %s, %s memory detected", clean.Log(cpuid.CPU.BrandName), humanize.Bytes(TotalMem))
 	}
@@ -275,8 +283,10 @@ func (c *Config) Init() error {
 	c.initSettings()
 	c.initHub()
 
+	// Propagate configuration.
 	c.Propagate()
 
+	// Connect to database.
 	if err := c.connectDb(); err != nil {
 		return err
 	} else if !c.Sponsor() {
@@ -284,6 +294,7 @@ func (c *Config) Init() error {
 		log.Info(MsgSignUp)
 	}
 
+	// Show log message.
 	log.Debugf("config: successfully initialized [%s]", time.Since(start))
 
 	return nil
@@ -313,8 +324,8 @@ func (c *Config) readSerial() string {
 	return ""
 }
 
-// initSerial initializes storage directories with a random serial.
-func (c *Config) initSerial() (err error) {
+// InitSerial initializes storage directories with a random serial.
+func (c *Config) InitSerial() (err error) {
 	if c.Serial() != "" {
 		return nil
 	}
@@ -473,10 +484,10 @@ func (c *Config) StaticAssetUri(res string) string {
 	return c.StaticUri() + "/" + res
 }
 
-// SiteUrl returns the public server URL (default is "http://photoprism.me:2342/").
+// SiteUrl returns the public server URL (default is "http://localhost:2342/").
 func (c *Config) SiteUrl() string {
 	if c.options.SiteUrl == "" {
-		return "http://photoprism.me:2342/"
+		return "http://localhost:2342/"
 	}
 
 	return strings.TrimRight(c.options.SiteUrl, "/") + "/"

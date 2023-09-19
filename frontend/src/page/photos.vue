@@ -3,8 +3,16 @@
        :infinite-scroll-disabled="scrollDisabled" :infinite-scroll-distance="scrollDistance"
        :infinite-scroll-listen-for-event="'scrollRefresh'">
 
-    <p-photo-toolbar :filter="filter" :settings="settings" :refresh="refresh"
-                     :update-filter="updateFilter" :update-query="updateQuery"></p-photo-toolbar>
+    <p-photo-toolbar
+      :context="context"
+      :filter="filter"
+      :settings="settings"
+      :refresh="refresh"
+      :update-filter="updateFilter"
+      :update-query="updateQuery"
+      :on-close="onClose"
+      :sticky="stickyToolbar"
+    />
 
     <v-container v-if="loading" fluid class="pa-4">
       <v-progress-linear color="secondary-dark" :indeterminate="true"></v-progress-linear>
@@ -12,7 +20,7 @@
     <v-container v-else fluid class="pa-0">
       <p-scroll-top></p-scroll-top>
 
-      <p-photo-clipboard :refresh="refresh" :selection="selection" :context="context"></p-photo-clipboard>
+      <p-photo-clipboard :context="context" :refresh="refresh" :selection="selection"></p-photo-clipboard>
 
       <p-photo-mosaic v-if="settings.view === 'mosaic'"
                       :context="context"
@@ -57,6 +65,14 @@ export default {
       type: Object,
       default: () => {
       },
+    },
+    onClose: {
+      type: Function,
+      default: undefined,
+    },
+    stickyToolbar: {
+      type: Boolean,
+      default: false
     },
   },
   data() {
@@ -621,14 +637,16 @@ export default {
           this.dirty = true;
           this.complete = false;
 
-          if (this.context === "archive") break;
+          if (this.context !== "archive") {
+            for (let i = 0; i < data.entities.length; i++) {
+              const uid = data.entities[i];
 
-          for (let i = 0; i < data.entities.length; i++) {
-            const uid = data.entities[i];
-
-            this.removeResult(this.results, uid);
-            this.removeResult(this.viewer.results, uid);
-            this.$clipboard.removeId(uid);
+              this.removeResult(this.results, uid);
+              this.removeResult(this.viewer.results, uid);
+              this.$clipboard.removeId(uid);
+            }
+          } else if (!this.results.length) {
+            this.refresh();
           }
 
           break;

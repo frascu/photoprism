@@ -5,7 +5,7 @@
         <v-expansion-panel-content v-if="!file.Missing" :key="file.UID" class="pa-0 elevation-0 secondary-light"
                                    style="margin-top: 1px;">
           <template #header>
-            <div class="caption">{{ file.baseName(70) }}</div>
+            <div class="caption filename">{{ file.baseName(70) }}</div>
           </template>
           <v-card>
             <v-card-text class="white pa-0">
@@ -65,6 +65,11 @@
                                    :disabled="busy"
                                    @click.stop.prevent="showDeleteDialog(file)">
                               <translate>Delete</translate>
+                            </v-btn>
+                            <v-btn v-if="experimental && canAccessPrivate && file.Primary" small depressed dark color="primary-button"
+                                   class="btn-action action-open-folder"
+                                   :href="folderUrl(file)" target="_blank">
+                              <translate>File Browser</translate>
                             </v-btn>
                           </td>
                         </tr>
@@ -202,7 +207,7 @@
                                 hide-details
                                 color="secondary-dark"
                                 :items="options.Orientations()"
-                                :readonly="readonly || !features.edit || (file.FileType !== 'jpg' && file.FileType !== 'png') || file.Error"
+                                :readonly="readonly || !features.edit || file.Error || (file.Frames && file.Frames > 1) || (file.Duration && file.Duration > 1) || (file.FileType !== 'jpg' && file.FileType !== 'png')"
                                 :disabled="busy"
                                 class="input-orientation"
                                 @change="changeOrientation(file)">
@@ -301,8 +306,11 @@ export default {
       features: this.$config.settings().features,
       config: this.$config.values,
       readonly: this.$config.get("readonly"),
+      experimental: this.$config.get("experimental"),
+      canAccessPrivate: this.$config.allow("photos", "access_library") && this.$config.allow("photos", "access_private"),
       options: options,
       busy: false,
+      rtl: this.$rtl,
       listColumns: [
         {
           text: this.$gettext('Primary'),
@@ -350,6 +358,16 @@ export default {
     },
     openFile(file) {
       this.$viewer.show([Thumb.fromFile(this.model, file)], 0);
+    },
+    folderUrl(m) {
+      if (!m) {
+        return '#';
+      }
+
+      const name = m.Name;
+      const path = name.substring(0, name.lastIndexOf('/'));
+
+      return this.$router.resolve({ path: '/index/files/' + path }).href;
     },
     downloadFile(file) {
       Notify.success(this.$gettext("Downloading…"));

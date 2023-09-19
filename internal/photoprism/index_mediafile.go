@@ -29,7 +29,7 @@ func (ind *Index) MediaFile(m *MediaFile, o IndexOptions, originalName, photoUID
 func (ind *Index) UserMediaFile(m *MediaFile, o IndexOptions, originalName, photoUID, userUID string) (result IndexResult) {
 	if m == nil {
 		result.Status = IndexFailed
-		result.Err = errors.New("index: media file is nil - possible bug")
+		result.Err = errors.New("index: media file is nil - you may have found a bug")
 		return result
 	}
 
@@ -184,7 +184,7 @@ func (ind *Index) UserMediaFile(m *MediaFile, o IndexOptions, originalName, phot
 	} else {
 		// Should never happen.
 		result.Status = IndexFailed
-		result.Err = fmt.Errorf("index: unexpectedly failed indexing %s - possible bug, please report", logName)
+		result.Err = fmt.Errorf("index: unexpectedly failed indexing %s - you may have found a bug, please report", logName)
 		return result
 	}
 
@@ -437,6 +437,11 @@ func (ind *Index) UserMediaFile(m *MediaFile, o IndexOptions, originalName, phot
 			details.SetCopyright(metaData.Copyright, entity.SrcXmp)
 			details.SetLicense(metaData.License, entity.SrcXmp)
 			details.SetSoftware(metaData.Software, entity.SrcXmp)
+
+			// Update externally marked as favorite.
+			if metaData.Favorite {
+				photo.SetFavorite(metaData.Favorite)
+			}
 		} else {
 			log.Warn(err.Error())
 			file.FileError = err.Error()
@@ -643,6 +648,8 @@ func (ind *Index) UserMediaFile(m *MediaFile, o IndexOptions, originalName, phot
 			}
 		}
 
+		// Set the video dimensions from the primary image if it could not be determined from the video metadata.
+		// If there is no primary image yet, File.UpdateVideoInfos() sets the fields in retrospect when there is one.
 		if file.FileWidth == 0 && primaryFile.FileWidth > 0 {
 			file.FileWidth = primaryFile.FileWidth
 			file.FileHeight = primaryFile.FileHeight
@@ -650,12 +657,15 @@ func (ind *Index) UserMediaFile(m *MediaFile, o IndexOptions, originalName, phot
 			file.FilePortrait = primaryFile.FilePortrait
 		}
 
+		// Set the video appearance from the primary image. In a future version, a still image extracted from the
+		// video could be used for this purpose if the primary image is not directly derived from the video file,
+		// e.g. in live photo stacks, see https://github.com/photoprism/photoprism/pull/3588#issuecomment-1683429455
 		if primaryFile.FileDiff > 0 {
-			file.FileDiff = primaryFile.FileDiff
 			file.FileMainColor = primaryFile.FileMainColor
-			file.FileChroma = primaryFile.FileChroma
-			file.FileLuminance = primaryFile.FileLuminance
 			file.FileColors = primaryFile.FileColors
+			file.FileLuminance = primaryFile.FileLuminance
+			file.FileDiff = primaryFile.FileDiff
+			file.FileChroma = primaryFile.FileChroma
 		}
 	}
 
@@ -896,9 +906,10 @@ func (ind *Index) UserMediaFile(m *MediaFile, o IndexOptions, originalName, phot
 		}
 	}
 
+	// Update related video files so they are properly grouped with the primary image in search results.
 	if (photo.PhotoType == entity.MediaVideo || photo.PhotoType == entity.MediaLive) && file.FilePrimary {
-		if err := file.UpdateVideoInfos(); err != nil {
-			log.Errorf("index: %s in %s (update video infos)", err, logName)
+		if updateErr := file.UpdateVideoInfos(); updateErr != nil {
+			log.Errorf("index: %s in %s (update video infos)", updateErr, logName)
 		}
 	}
 

@@ -21,7 +21,7 @@ type SearchPhotosGeo struct {
 	Title     string    `form:"title"`
 	Before    time.Time `form:"before" time_format:"2006-01-02"`
 	After     time.Time `form:"after" time_format:"2006-01-02"`
-	Favorite  bool      `form:"favorite"`
+	Favorite  string    `form:"favorite" example:"favorite:yes" notes:"Finds favorites only"`
 	Unsorted  bool      `form:"unsorted"`
 	Video     bool      `form:"video"`
 	Vector    bool      `form:"vector"`
@@ -29,7 +29,7 @@ type SearchPhotosGeo struct {
 	Photo     bool      `form:"photo"`
 	Raw       bool      `form:"raw"`
 	Live      bool      `form:"live"`
-	Scan      bool      `form:"scan"`
+	Scan      string    `form:"scan" example:"scan:true scan:false" notes:"Finds scanned photos and documents"`
 	Panorama  bool      `form:"panorama"`
 	Portrait  bool      `form:"portrait"`
 	Landscape bool      `form:"landscape"`
@@ -38,7 +38,7 @@ type SearchPhotosGeo struct {
 	Public    bool      `form:"public"`
 	Private   bool      `form:"private"`
 	Review    bool      `form:"review"`
-	Quality   int       `form:"quality"`
+	Quality   int       `form:"quality" notes:"Minimum quality score (1-7)"`
 	Face      string    `form:"face" notes:"Face ID, yes, no, new, or kind"`
 	Faces     string    `form:"faces"` // Find or exclude faces if detected.
 	Subject   string    `form:"subject"`

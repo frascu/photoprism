@@ -31,7 +31,7 @@ type SearchPhotos struct {
 	Photo     bool      `form:"photo" notes:"Finds only photos, no videos"`
 	Raw       bool      `form:"raw" notes:"Finds pictures with RAW image file"`
 	Live      bool      `form:"live" notes:"Finds Live Photos and short videos"`
-	Scan      bool      `form:"scan" notes:"Finds scanned images and documents"`
+	Scan      string    `form:"scan" example:"scan:true scan:false" notes:"Finds scanned photos and documents"`
 	Panorama  bool      `form:"panorama" notes:"Finds pictures with an aspect ratio > 1.9:1"`
 	Portrait  bool      `form:"portrait" notes:"Finds pictures in portrait format"`
 	Landscape bool      `form:"landscape" notes:"Finds pictures in landscape format"`
@@ -41,17 +41,21 @@ type SearchPhotos struct {
 	Archived  bool      `form:"archived" notes:"Finds archived pictures"`
 	Public    bool      `form:"public" notes:"Excludes private pictures"`
 	Private   bool      `form:"private" notes:"Finds private pictures"`
-	Favorite  bool      `form:"favorite" notes:"Finds favorites only"`
+	Favorite  string    `form:"favorite" example:"favorite:yes" notes:"Finds favorites only"`
 	Unsorted  bool      `form:"unsorted" notes:"Finds pictures not in an album"`
 	Lat       float32   `form:"lat" notes:"Latitude (GPS Position)"`
 	Lng       float32   `form:"lng" notes:"Longitude (GPS Position)"`
+	Latmin    float32   `form:"latmin" notes:"Minimum latitude (GPS Position)"`
+	Latmax    float32   `form:"latmax" notes:"Maximum latitude (GPS Position)"`
+	Lngmin    float32   `form:"lngmin" notes:"Minimum longitude (GPS Position)"`
+	Lngmax    float32   `form:"lngmax" notes:"Maximum longitude (GPS Position)"`
 	Dist      uint      `form:"dist" example:"dist:5" notes:"Distance in km in combination with lat/lng"`
 	Fmin      float32   `form:"fmin" notes:"F-number (min)"`
 	Fmax      float32   `form:"fmax" notes:"F-number (max)"`
 	Chroma    int16     `form:"chroma" example:"chroma:70" notes:"Chroma (0-100)"`
 	Diff      uint32    `form:"diff" notes:"Differential Perceptual Hash (000000-FFFFFF)"`
 	Mono      bool      `form:"mono" notes:"Finds pictures with few or no colors"`
-	Geo       bool      `form:"geo" notes:"Finds pictures with GPS location"`
+	Geo       string    `form:"geo" example:"geo:yes" notes:"Finds pictures with or without coordinates"`
 	Keywords  string    `form:"keywords"  example:"keywords:\"buffalo&water\"" notes:"Keywords, can be combined with & and |"`                                                                                        // Filter by keyword(s)
 	Label     string    `form:"label" example:"label:cat|dog" notes:"Label Name, OR search with |"`                                                                                                                   // Label name
 	Category  string    `form:"category"  notes:"Location Category Name"`                                                                                                                                             // Moments
@@ -70,7 +74,7 @@ type SearchPhotos struct {
 	Album     string    `form:"album" example:"album:berlin" notes:"Album UID or Name, supports * wildcards"`                                                                                                         // Album UIDs or name
 	Albums    string    `form:"albums" example:"albums:\"South Africa & Birds\"" notes:"Album Names, can be combined with & and |"`                                                                                   // Multi search with and/or
 	Color     string    `form:"color" example:"color:\"red|blue\"" notes:"Color Name (purple, magenta, pink, red, orange, gold, yellow, lime, green, teal, cyan, blue, brown, white, grey, black), OR search with |"` // Main color
-	Quality   int       `form:"quality" notes:"Quality Score (0-7)"`                                                                                                                                                  // Photo quality score
+	Quality   int       `form:"quality" notes:"Minimum quality score (1-7)"`                                                                                                                                          // Photo quality score
 	Review    bool      `form:"review" notes:"Finds pictures in review"`                                                                                                                                              // Find photos in review
 	Camera    string    `form:"camera" example:"camera:canon" notes:"Camera Make/Model Name"`                                                                                                                         // Camera UID or name
 	Lens      string    `form:"lens" example:"lens:ef24" notes:"Lens Make/Model Name"`                                                                                                                                // Lens UID or name
